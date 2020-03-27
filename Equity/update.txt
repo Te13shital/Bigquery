@@ -1,0 +1,13 @@
+update  
+`mygame-162109.PP_Dev_Data.new_hands_prod`    as sidePotHands
+set sidePotHands.totalEvDiff =eq.totalEvDiff,
+sidePotHands.adjustedWinning = Cast(eq.evAdjusted AS String)
+FROM  `mygame-162109.PP_Dev_Data.newHandsRawEquityNewQueryTwoPairs2Data1`   as eq
+		WHERE eq.playerName =  sidePotHands.playerAlias 
+and  eq.gameNo =  sidePotHands.gameNo 
+AND sidePotHands.gameNo is not null
+AND sidePotHands.playerAlias   is not null
+and eq.totalEvDiff is not null
+-- and sidePotHands.partitionDate = "2020-03-10 00:00:00"
+and sidePotHands.partitionDate >=  '2020-01-01 00:00:00' 
+and sidePotHands.partitionDate <='2020-03-26 00:00:00'
