@@ -1,0 +1,973 @@
+CREATE TEMPORARY FUNCTION analyzeBoard(playerData STRING)
+RETURNS Array<struct<winningRank INT64,highCard INT64,alias STRING,sidePot STRING,plyboards STRING>>
+
+
+LANGUAGE js AS """
+let filterData
+let myerrorData=[]
+let newTwoPairData = []
+try {
+let row =JSON.parse(playerData)
+let data1 = JSON.parse(JSON.stringify(row.sidePotInfo))
+highCardLogic(data1)
+function highCardLogic(data1){
+let MydData= JSON.parse(JSON.stringify(data1)).filter(obj=>obj.plyboards !=null )
+myerrorData.push(data1)
+ if(MydData.length > 0){
+    MydData.sort((a, b) => (a.winningRank - b.winningRank));
+
+    MydData.sort(function (a, b) {
+        return !a.winningRank - !b.winningRank
+    });
+    
+     let winningRank = MydData[0].winningRank     
+    let istwoPairs =false
+          if(winningRank  === 8)istwoPairs =true
+    
+    const lookup = MydData.reduce((a, e) => {
+      a[e.winningRank] = ++a[e.winningRank] || 0;
+      return a;
+    }, {});
+    let winningHighCard,winningCount,lookup2,filterData2=[]
+     filterData = MydData.filter(e => lookup[e.winningRank])
+     let filterDataCopy = JSON.parse(JSON.stringify(filterData.filter(e=>e.winningRank!=null)))
+     if(filterData.length > 0 && !istwoPairs){
+     filterData.sort((a, b) => (a.highCard - b.highCard));
+          winningHighCard = filterData[0].highCard
+          winningCount = (filterData.filter(e => e.highCard === winningHighCard)).length
+          lookup2 = filterData.reduce((a, e) => {
+            if (winningRank === e.winningRank)
+              a[`${e.highCard}_${e.winningRank}`] = ++a[`${e.highCard}_${e.winningRank}`] || 0;
+            return a;
+          }, {});
+          filterData2 = filterData.filter(e => lookup2[`${e.highCard}_${e.winningRank}`])
+          if (winningCount === 1) filterData2 = []
+     }else if(istwoPairs){
+            filterData2 = filterDataCopy
+          }
+    
+    let data = JSON.parse(JSON.stringify(filterData2))
+    let myBoard = []
+    let init = 0, myHighCard = "", boardIndex = 0
+    let getHighCards = (holeCards) => {
+      if (holeCards.indexOf('A') != -1) return 1
+      else if (holeCards.indexOf('K') != -1) return 2
+      else if (holeCards.indexOf('Q') != -1) return 3
+      else if (holeCards.indexOf('J') != -1) return 4
+      else if (holeCards.indexOf('T') != -1) return 5
+      else if (holeCards.indexOf('9') != -1) return 6
+      else if (holeCards.indexOf('8') != -1) return 7
+      else if (holeCards.indexOf('7') != -1) return 8
+      else if (holeCards.indexOf('6') != -1) return 9
+      else if (holeCards.indexOf('5') != -1) return 10
+      else if (holeCards.indexOf('4') != -1) return 11
+      else if (holeCards.indexOf('3') != -1) return 12
+      else if (holeCards.indexOf('2') != -1) return 13
+    
+    }
+    let getHighCardOfText = (cards) => {
+      if (cards.indexOf('ace') != -1) return 1
+      else if (cards.indexOf('king') != -1) return 2
+      else if (cards.indexOf('queen') != -1) return 3
+      else if (cards.indexOf('jack') != -1) return 4
+      else if (cards.indexOf('ten') != -1) return 5
+      else if (cards.indexOf('nine') != -1) return 6
+      else if (cards.indexOf('eight') != -1) return 7
+      else if (cards.indexOf('seven') != -1) return 8
+      else if (cards.indexOf('six') != -1) return 9
+      else if (cards.indexOf('five') != -1) return 10
+      
+      else if (cards.indexOf('four') != -1) return 11
+      else if (cards.indexOf('three') != -1) return 12
+      else if (cards.indexOf('two') != -1) return 13
+    
+    }
+    if (filterData2.length > 0) {
+    
+      for (let i = 0; i < data.length; i++) {
+        data[i].actualHighCard = data[i].highCard
+        data[i].calcHighCard = false
+        if ((data[i].plyboards).trim().indexOf('two pairs,') != -1) {
+          data[i].actualHighCard = (/\\,([^\\-]*)\\-/gm.exec(data[i].plyboards))[0].replace(/[,-]/g, '').trim().split('and')
+          let updateDHighCard = []
+          let updatedData = data[i].actualHighCard
+          for (let j = 0; j < updatedData.length; j++) {
+            updateDHighCard.push(getHighCardOfText((updatedData[j]).trim()))
+          }
+          data[i].actualHighCard = updateDHighCard
+    istwoPairs=true
+        }
+        data[i].plyboards = ((/[^--]*$/gm).exec(data[i].plyboards)[0]).trim()
+        data[i].plyboards = data[i].plyboards.replace(/[hdcs]/g, '')
+        let board = data[i].plyboards.split(",")
+        if (!data[i].myHighCard) data[i].myHighCard = []
+        for (let d = 0; d < board.length; d++) {
+          data[i].myHighCard.push(getHighCards((board[d]).trim()))
+        }
+        data[i].firstHighCard = data[i].myHighCard[0]
+        data[i].secondHighCard = data[i].myHighCard[1]
+        data[i].thirdHighCard = data[i].myHighCard[2]
+        data[i].fourthHighCard = data[i].myHighCard[3]
+        data[i].fifthHighCard = data[i].myHighCard[4]
+      }
+      
+    myerrorData.push({MydData:data})
+    if(istwoPairs){
+     
+     let twoPairPokerRank = []
+              for (let i = 0; i < data.length; i++) {
+                twoPairPokerRank.push(data[i].actualHighCard)
+              }
+              twoPairPokerRank.sort(function (a, b) {
+                if (a[0] > b[0]) return 1;
+                if (a[0] < b[0]) return -1;
+                if (a[1] > b[1]) return 1;
+     if (a[1] < b[1]) return -1;
+                return 0;
+              });
+              myerrorData.push({LTWO:twoPairPokerRank})
+                myerrorData.push({winningRank:data})
+              for (let i = 0; i < data.length; i++) {
+                if (twoPairPokerRank[0].toString() === data[i].actualHighCard.toString()){
+                  data[i].actualHighCard = 1
+                  row.sidePotInfo.filter(obj=>obj.alias === data[i].alias)[0].highCard=data[i].actualHighCard
+                }else{
+                  data[i].actualHighCard = 100
+                   row.sidePotInfo.filter(obj=>obj.alias === data[i].alias)[0].highCard=data[i].actualHighCard
+                }
+              }
+          
+              data.sort((a, b) => (a.actualHighCard - b.actualHighCard));
+              let winningHighCard = data[0].actualHighCard
+              let winningCount = (data.filter(e => e.actualHighCard === winningHighCard)).length
+              let lookup2 = data.reduce((a, e) => {
+                if (winningRank === e.winningRank)
+                  a[`${e.actualHighCard}_${e.winningRank}`] = ++a[`${e.actualHighCard}_${e.winningRank}`] || 0;
+                return a;
+              }, {});
+              let filterData2 = data.filter(e => lookup2[`${e.actualHighCard}_${e.winningRank}`])
+              if (winningCount === 1) filterData2 = []
+              data = JSON.parse(JSON.stringify(filterData2))
+    }
+    
+    }
+    
+    let newData = []
+          Object.keys(lookup).forEach(function(key) {
+            let playersHighCard = [], playersHighCard1 = []
+            for (var i = 0; i < data.length; i++) {
+             if(data[i].winningRank ==key)
+              playersHighCard.push(data[i]["myHighCard"]);
+            }
+            playersHighCard1 = JSON.parse(JSON.stringify(playersHighCard.sort()))
+            playersHighCard.sort(function (a, b) {
+              if (a[0] > b[0]) return 1;
+              if (a[0] < b[0]) return -1;
+              if (a[1] > b[1]) return 1;
+              if (a[1] < b[1]) return -1;
+              if (a[2] > b[2]) return 1;
+              if (a[2] < b[2]) return -1;
+              if (a[3] > b[3]) return 1;
+              if (a[3] < b[3]) return -1;
+              if (a[4] > b[4]) return 1;
+              if (a[4] < b[4]) return -1;
+              return 0;
+            });
+      
+            for (let mylength = 0; mylength < data.length; mylength++) {
+              if( data[mylength].winningRank ==key){
+                if (data[mylength].myHighCard.toString() === playersHighCard[0].toString()) {
+                  data[mylength].actualHighCard = 1
+                  newData.push(data[mylength])
+                } else {
+                  data[mylength].actualHighCard = 100
+                  newData.push(data[mylength])
+                }
+              }
+             
+            }
+    
+        });
+    if(newData.length ===0 && newTwoPairData.length !=0){
+    newData = newTwoPairData
+    }     
+    if(newData.length>0){
+    for(let i=0;i<newData.length;i++){
+    if(newData[i].actualHighCard!=null && newData[i].actualHighCard!='undefined' ){
+    row.sidePotInfo.filter(obj=>obj.alias === newData[i].alias)[0].highCard=newData[i].actualHighCard
+    
+    
+    }
+    }
+    }
+    return newData
+
+ }else{
+return 1
+ }
+}
+return row.sidePotInfo
+
+
+
+} catch (ex) {
+let row =JSON.parse(playerData)
+    return JSON.stringify(`${ex},${row.gameNo}${JSON.stringify(myerrorData)},Inside Error`);
+};
+""";
+
+CREATE TEMPORARY FUNCTION getHighCard(isStraightRank BOOLEAN,gameNo INT64,cardsDtls STRING)
+RETURNS string
+LANGUAGE js AS """
+try {
+let cardslist = cardsDtls.split(",");
+let cards = cardslist[0]
+
+    if (cards.indexOf('ace') != -1) {
+if(isStraightRank)
+return 14
+else
+return 1
+    }else if (cards.indexOf('king') != -1) return 2
+    else if (cards.indexOf('queen') != -1) return 3
+    else if (cards.indexOf('jack') != -1) return 4
+    else if (cards.indexOf('ten') != -1) return 5
+    else if (cards.indexOf('nine') != -1) return 6
+    else if (cards.indexOf('eight') != -1) return 7
+    else if (cards.indexOf('seven') != -1) return 8
+    else if (cards.indexOf('six') != -1) return 9
+    else if (cards.indexOf('five') != -1) return 10
+    else if (cards.indexOf('four') != -1) return 11
+    else if (cards.indexOf('three') != -1) return 12
+    else if (cards.indexOf('two') != -1) return 13
+return JSON.stringify(cards)
+
+
+
+} catch (ex) {
+    return JSON.stringify(`${ex},${gameNo},Inside Error`);
+};
+""";
+
+CREATE TEMPORARY FUNCTION getFinalBoard(plyBoardsStreet ARRAY<struct<board STRING,street STRING,streetIndex STRING>>,actionStreet STRING)
+RETURNS string
+LANGUAGE js AS """
+try {
+   const result = [];
+const map = new Map();
+for (const item of plyBoardsStreet) {
+    if(!map.has(item.street)){
+        map.set(item.street, true);  
+        result.push({
+            street: item.street,
+            board: item.board,
+     streetIndex:Number(item.streetIndex)
+        });
+    }
+}
+let finalBaord = ''
+if(actionStreet=== 'preFlop')finalBaord = ''
+if(actionStreet=== 'flop') finalBaord = result.filter(obj=>obj.street === 'flop')[0].board
+if(actionStreet=== 'turn') finalBaord =  (result.filter(obj=>obj.street === 'flop')[0].board).concat(' ').concat( result.filter(obj=>obj.street === 'turn')[0].board)
+if(actionStreet=== 'river')finalBaord = ((result.filter(obj=>obj.street === 'flop')[0].board).concat(' ').concat( result.filter(obj=>obj.street === 'turn')[0].board)).concat(' ').concat( result.filter(obj=>obj.street === 'river')[0].board)
+
+return finalBaord
+
+
+} catch (ex) {
+    return JSON.stringify(`${ex}Inside Error`);
+};
+""";
+
+CREATE TEMPORARY FUNCTION calculateSidePot(gameExp STRING, 
+    Actions ARRAY < struct < sequence INT64, street STRING, actor STRING, action STRING, amount FLOAT64, cards ARRAY < STRING > >>,
+    Players ARRAY < STRUCT < alias STRING, seat INT64, startStack FLOAT64, endStack FLOAT64, cards ARRAY < STRING >, rake FLOAT64, 
+    plyAccountName STRING >>,
+ playerAlias STRING, handHistory ARRAY < STRING >, gameNo INT64)
+RETURNS struct<isplayerDidActionsAfterFold BOOLEAN,manualSidePot ARRAY < STRUCT<alias STRING,sidePot STRING,sidePotWithAlias STRING,handSummary STRING>>,
+Actions ARRAY < struct < sequence INT64, street STRING, actor STRING, action STRING, amount FLOAT64, cards ARRAY < STRING > >>>
+    LANGUAGE js AS """
+try {
+let AllInDtls=[], allInPLayers =[],insideUpdate=""  , isplayerDidActionsAfterFold=false
+let updateActions=JSON.parse(JSON.stringify(Actions)) 
+    let groupPlayers = [], playersData = [],playerDetails=[]
+    let plyrList = Array.from(Players, x => x.alias);
+    plyrList.sort((a, b) => b.length - a.length)
+    Players.map((plyr) => {
+        plyr.isFold = false
+        plyr.isBet = false
+        playersData.push(plyr)
+    })
+    let data = [],data1 = [],
+     gamePotDetails = '',hhClone = [];
+    for (var HH in handHistory) {
+        let line = handHistory[HH], breakFlag = false, alias = '',  dealingSummaryFlag = false;
+
+        if ( line.indexOf('Main Pot:') != -1) {
+gamePotDetails = line
+
+          }
+        if (line.indexOf('Account Info') !== -1 || line.indexOf('Account  Info') !== -1)
+            break;
+        plyrList.map((plyr) => {
+            let regex = new RegExp('^' + plyr, 'g')
+            if (regex.test(line) && !breakFlag) {
+                line = line.replace(plyr, '');
+                alias = plyr.trim()
+                breakFlag = true
+                playerDetails.push({
+                   alias:alias,sidePot:'',handSummary:line
+                    })
+                
+            }
+            else if (!breakFlag) alias = ''
+        })
+
+        if (playersData.filter((ob) => ob.alias === alias)[0] && alias != '') {
+            let data = playersData.filter((ob) => ob.alias === alias)[0]
+            if (/\\(folded\\)$/.test(line) || /sits out$/.test(line)) {
+                data.isFold = true
+               playersData.filter((ob) => ob.alias === alias)[0].isFold=true
+                if (!(/\\(didn't bet\\)$/.test(line))){ 
+                      data.isBet = true
+                       playersData.filter((ob) => ob.alias === alias)[0].isBet=true
+                   }
+                    
+            }
+            if (/bet\\s\\$?([\\d.]+),/g.exec(line) != null) {
+                data.totalBet = Number(/bet\\s\\$?([\\d.]+),/g.exec(line)[1].trim())
+            } else if (/lost\\s\\$?([\\d.]+)/g.exec(line) != null) {
+                data.totalBet = Number(/lost\\s\\$?([\\d.]+)/g.exec(line)[1].trim())
+            }
+        }
+
+        data.push(line)
+    }
+    let newActions = []
+    Actions.filter((ob) => {
+        if (['show', 'hole cards'].indexOf(ob.action) === -1 && ['dealer'].indexOf(ob.actor) === -1) {
+            if (typeof ob.amount === "undefined") ob.amount = 0
+            newActions.push(ob)
+        }
+    })
+      let newActionsMap = newActions.reduce((prev, next) => {
+        if (`${next.actor}_${next.street}` in prev) {
+             if (prev[`${next.actor}_${next.street}`].amount) {
+            prev[`${next.actor}_${next.street}`].action = next.action === 'check' ? prev[`${next.actor}_${next.street}`].action : next.action;
+            let n1 = prev[`${next.actor}_${next.street}`].amount, n2 = next.amount
+            prev[`${next.actor}_${next.street}`].amount = Number(Number(n1 + n2).toFixed(2))
+          }
+          else {
+            prev[`${next.actor}_${next.street}`].action = next.action === 'check' ? prev[`${next.actor}_${next.street}`].action : next.action;
+            prev[`${next.actor}_${next.street}`].amount = next.amount ? next.amount : 0
+          }
+          
+        } else {
+           
+            delete next.cards
+            delete next.highCard
+            delete next.pokerRank
+            prev[`${next.actor}_${next.street}`] = next;
+        }
+        return prev;
+    }, {});
+let reduceData = [JSON.parse(JSON.stringify(newActionsMap))]
+let preflop=0,turn=0,flop=0,river=0
+let preflopAllin=[],turnAllin=[],flopAllin=[],riverAllin=[]
+
+let flopData =[],preFlopData = [],turnData = [],riverData=[]
+Object.entries(reduceData[0]).forEach(([key, value]) => {
+if(value.street === 'flop'){
+if(value.action != 'fold') flop=flop+1
+flopData.push(value)
+}
+if(value.street === 'preFlop'){
+ preFlopData.push(value)
+if(value.action != 'fold') preflop=preflop+1
+}
+if(value.street === 'turn') {
+turnData.push(value)
+if(value.action != 'fold') turn=turn+1
+}
+if(value.street === 'river') {
+riverData.push(value)
+if(value.action != 'fold') river=river+1
+}
+
+});
+
+if(flopData.filter(ob=>ob.action === 'allIn').length >0){
+
+let AllIn =  flopData.filter(ob=>ob.action === 'allIn')
+AllIn =AllIn.sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+AllInDtls=AllIn
+if(AllIn.length>0)
+flopData.map((ob)=>{
+if(ob.action != 'allIn' && ob.amount == AllIn[0].amount  && ob.actor != AllIn[0].actor){
+ob.action = 'allIn'
+AllInDtls.push(ob)
+        }else if(ob.action != 'fold' && ob.actor != AllIn[0].actor) {
+  ob.action = 'allIn'
+AllInDtls.push(ob)
+}
+})
+}
+if(preFlopData.filter(ob=>ob.action === 'allIn').length >0){
+
+let AllIn =  preFlopData.filter(ob=>ob.action === 'allIn')
+AllIn =AllIn.sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+AllInDtls=AllIn
+if(AllIn.length>0)
+preFlopData.map((ob)=>{
+if(ob.action != 'allIn' && ob.amount == AllIn[0].amount  && ob.actor != AllIn[0].actor){
+ob.action = 'allIn'
+AllInDtls.push(ob)
+        }else if(ob.action != 'fold' && ob.actor != AllIn[0].actor) {
+  ob.action = 'allIn'
+AllInDtls.push(ob)
+}
+})
+}
+if( turnData.filter(ob=>ob.action === 'allIn').length >0){
+        
+    let AllIn =  turnData.filter(ob=>ob.action === 'allIn')
+AllIn =AllIn.sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+AllInDtls=AllIn
+    if(AllIn.length>0)
+    turnData.map((ob)=>{
+        if(ob.action != 'allIn' && ob.amount == AllIn[0].amount  && ob.actor != AllIn[0].actor){
+        ob.action = 'allIn'
+        AllInDtls.push(ob)
+        }else if(ob.action != 'fold' && ob.actor != AllIn[0].actor) {
+  ob.action = 'allIn'
+AllInDtls.push(ob)
+}
+    })
+}
+if(riverData.filter(ob=>ob.action === 'allIn').length > 0){
+        
+    let AllIn =  riverData.filter(ob=>ob.action === 'allIn')
+AllIn =AllIn.sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
+AllInDtls=AllIn
+    if(AllIn.length>0)
+    riverData.map((ob)=>{
+        if(ob.action != 'allIn' && ob.amount == AllIn[0].amount  && ob.actor != AllIn[0].actor){
+        ob.action = 'allIn'
+        AllInDtls.push(ob)
+        }else if(ob.action != 'fold' && ob.actor != AllIn[0].actor) {
+  ob.action = 'allIn'
+AllInDtls.push(ob)
+}
+    })
+}
+ AllInDtls = [...new Set( AllInDtls.map(obj => obj)) ]
+if(AllInDtls.findIndex(plyrInfo => plyrInfo.actor === playerAlias) != -1 && AllInDtls.length > 1){
+let streetActionToTest = [],
+                  allInStreet = [...new Set(AllInDtls.map(o => o.street))];
+                if (allInStreet[0] === 'preFlop') streetActionToTest = ['preFlop']
+                if (allInStreet[0] === 'flop') streetActionToTest = ['preFlop', 'flop']
+                if (allInStreet[0] === 'turn') streetActionToTest = ['preFlop', 'flop', 'turn']
+             isplayerDidActionsAfterFold = Actions.filter((ob) => streetActionToTest.indexOf(ob.street) === -1 && ['call', 'raise', 'check', 'bet', 'fold'].indexOf(ob.action) != -1).length > 0 ? false : true
+
+}
+updateActions.map((obj)=>{
+  AllInDtls.map((data)=> {
+if(obj.sequence === data.sequence) {
+obj.action = data.action
+} 
+})
+
+})
+
+
+
+let playersPotDetls = [],
+        result = Object.keys(newActionsMap).map(id => newActionsMap[id]),
+        mainPot = false, potNumber = 0,
+        streets = ['preflop', 'flop', 'turn', 'river'],
+        manuallSidePot = [],
+          dup_Players = JSON.parse(JSON.stringify(playersData)),
+          foldedPlayers =dup_Players.filter((obj) => obj.isFold);
+        dup_Players = dup_Players.filter((ob) => typeof ob.totalBet != "undefined")
+  let calculatePot = true
+        for (let k = 0; k < streets.length; k++) {
+          let data = result.filter((obj) => (obj.street).toLowerCase() === streets[k].toLowerCase()),
+            clonePlyrs = JSON.parse(JSON.stringify(data)).filter(obj => obj.action != 'check')
+          if (clonePlyrs.length > 0) {
+            let allInValue = JSON.parse(JSON.stringify(clonePlyrs.filter((obj) => obj.action === 'allIn' && obj.action != 'fold'))),
+              minAllInValue = allInValue.sort((a, b) => (Number(a.amount) - Number(b.amount)))
+            if (minAllInValue.length > 0) {
+              clonePlyrs.map((obj) => {
+                if (obj.amount >= minAllInValue[0].amount) {
+                  if (obj.action === 'fold') obj.action = 'raise'
+                }
+              })
+            }
+ calculatePot = clonePlyrs.filter((obj) => obj.action === 'allIn').length > 0 ? true : false
+ if (calculatePot) {
+            while (clonePlyrs.length > 1) {
+              let potAmount = 0,
+                playersPot = [],
+                checkCompareData = [],
+                mainPotMinValue = JSON.parse(JSON.stringify((clonePlyrs.sort((a, b) => (a.amount - b.amount))).filter((obj) => obj.action != 'fold'))),
+                noOfPlayerRaiseLength = mainPotMinValue.length
+              clonePlyrs.map((obj) => { if (obj.action != 'fold') checkCompareData.push(obj.actor) })
+              if (noOfPlayerRaiseLength === 1) {
+                mainPotMinValue = JSON.parse(JSON.stringify((clonePlyrs.sort((a, b) => (b.amount - a.amount))).filter((obj) => obj.action === 'fold')))
+                clonePlyrs.map((obj) => { checkCompareData.push(obj.actor) })
+              }
+              if (mainPot) potNumber = potNumber + 1
+              if (checkCompareData.length > 1) {
+                for (let i = 0; i < clonePlyrs.length; i++) {
+                  let playerActionAmount = Number(clonePlyrs[i].amount) >= Number(mainPotMinValue[0].amount) ? Number(mainPotMinValue[0].amount) : Number(clonePlyrs[i].amount)
+                  clonePlyrs[i].amount = clonePlyrs[i].amount - playerActionAmount
+                  potAmount = potAmount + playerActionAmount
+                  playersPot.push(clonePlyrs[i].actor)
+                  if (clonePlyrs.length - 1 === i) {
+                    var getMainPotRaiseActionPlayer = [];
+                    mainPotMinValue.forEach((obj) => getMainPotRaiseActionPlayer.push(obj.actor))
+                    if (playersPotDetls.length >= 1) {
+                      let a = (playersPotDetls[playersPotDetls.length - 1].plyList).sort()
+                      let b = (playersPot).sort()
+                      if (a.toString() === b.toString()) {
+                        potNumber = potNumber - 1
+                        playersPotDetls[playersPotDetls.length - 1].potAmount = playersPotDetls[playersPotDetls.length - 1].potAmount + potAmount
+                      }
+                      else playersPotDetls.push({ pot: potNumber, plyList: playersPot, potAmount: potAmount })
+                    } else {
+                      playersPotDetls.push({ pot: potNumber, plyList: getMainPotRaiseActionPlayer, potAmount: potAmount })
+                    }
+                    potAmount = 0
+                    clonePlyrs = clonePlyrs.filter((obj) => obj.amount != 0)
+                  }
+                }
+              } else break;
+              if (!mainPot) mainPot = true
+            }
+}
+          }
+        }
+        for (let i = 0; i < playersPotDetls.length; i++) {
+     
+            for (let j = 0; j < playersPotDetls[i].plyList.length; j++) {
+              manuallSidePot.push(`sidePot${playersPotDetls[i].pot}_Value${playersPotDetls[i].pot}_${playersPotDetls[i].plyList[j]}_${playersPotDetls[i].potAmount}`)
+            }
+          
+        }
+    let mainManuallPot = [], updatedSidePotDetails = []
+        if (gamePotDetails.indexOf('Main Pot:') !== -1) {
+ let updatedLine =  gamePotDetails.split('Rake')[0].substr(gamePotDetails.indexOf(' Side Pot 1:'))
+let sidePotDetails = (gamePotDetails.replace((updatedLine.trim()),"")).split('Rake')[0].substr(gamePotDetails.indexOf('Main Pot:'))
+               
+            sidePotDetails.split('Main Pot').map((data) => {
+                if (data.trim() !== '') updatedSidePotDetails.push('0'.concat(data.trim()))
+            })
+            }
+    if (gamePotDetails.indexOf('Side Pot 1:') !== -1) {
+            let sidePotDetails = gamePotDetails.split('Rake')[0].substr(gamePotDetails.indexOf('Side Pot 1:'))
+            sidePotDetails.split('Side Pot').map((data) => {
+                if (data.trim() !== '') updatedSidePotDetails.push(data.trim())
+            })
+            }
+            for (let i = 0; i < updatedSidePotDetails.length; i++) {
+                for (let j = 0; j < manuallSidePot.length; j++) {
+                    if (manuallSidePot[j].indexOf(`sidePot${i}_Value${i}_`) != -1){
+                    let sidePotInfo = (manuallSidePot[j].replace(/[^_]*$/g, "")).concat(/\\:\\s\\$?([^\\:]+)\\/?$/g.exec(updatedSidePotDetails[i])[1])
+                    let playersidePotInfo = sidePotInfo
+    let str2=String((/_[^_]*$/g.exec(sidePotInfo)))
+  let str1 =  (/(?:.*?\\_){2}/g.exec(sidePotInfo)[0])
+data1.push(sidePotInfo)
+let playerDtls = []
+playerDetails.map((obj)=>{
+if(obj.alias==(( playersidePotInfo.substring(0, sidePotInfo.lastIndexOf(str2)).replace(str1,"")))){
+if(obj.sidePot ===''){
+obj.sidePot=`sidePot${i}_Value${i}${str2}`
+obj.sidePotWithAlias = sidePotInfo
+}else{
+playerDtls.push({
+alias:obj.alias,
+sidePot:`sidePot${i}_Value${i}${str2}`,
+handSummary:obj.handSummary,
+sidePotWithAlias : sidePotInfo
+
+})
+}
+}
+const result = [...new Set([...playerDetails, ...playerDtls])]
+playerDetails =result
+})
+                    }
+                        
+                }
+            }
+
+           let myData = playerDetails.filter(obj=>obj.sidePot!=='')
+
+    return {isplayerDidActionsAfterFold,manualSidePot:Array.from(new Set(myData.map(JSON.stringify))).map(JSON.parse),Actions:updateActions}
+} catch (ex) {
+    return JSON.stringify(` ${ex}Inside Error`);
+};
+""";
+
+with handSummaryDtls As(
+select * from (
+SELECT gameNo,handSummary,mainPot ,
+calculateSidePot(gameInfo.game,Actions,Players,playerAlias,handSummary,gameNo)playerDtls,PlayerStats.result ,playerAlias ,sidePot ,uniqueId,
+partitionDate ,time,ROW_NUMBER() OVER (PARTITION BY gameNo ,playerAlias ) AS rn
+FROM `mygame-162109.PP_Dev_Data.new_hands_prod`    
+where   gameInfo.gameSubType <> 'Omaha Hi/Lo'  and isRIT <> true
+and partitionDate >= '2020-01-17 00:00:00' 
+and partitionDate <= '2020-02-13 00:00:00'
+and concat(cast(gameNo as string ),playerAlias ) in (
+select concat(cast(gameNo as string ),playerAlias ) from 
+(
+ SELECT gameNo ,playerAlias,handHistory,
+sum(if(handHistoryArray like "%[ two pairs,%",1,0)) total
+from (
+SELECT gameNo,playerAlias,
+ split(handHistory,'#*#')handHistoryArray,handHistory   
+ from `mygame-162109.PP_Data.raw_hands`   
+ where partitionDate >= '2020-01-17 00:00:00' and partitionDate <= '2020-02-13 00:00:00'
+ and playerAlias is not null),
+UNNEST(handHistoryArray) as  handHistoryArray
+group by gameNo,playerAlias   ,handHistory)
+where total > 1
+order by gameNo,playerAlias
+
+)
+
+
+)
+where rn  =1
+)
+
+,splitSidePot as(
+SELECT
+ gameNo,mainPot,result,playerAlias ,REGEXP_EXTRACT(manSidePot.sidePot,r'([^\_]+$)')AS sidePotValue,
+ ARRAY_AGG(Struct(
+
+  if(regexp_contains(LOWER(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]')), 'royal flush'),1,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*'), 'straight flush'),2,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'four of a kind'),3,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'full house'),4,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a fullhouse'),4,
+IF(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a flush'),5,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a straight'),6,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'three of a kind'),7,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*'), 'two pairs'),8,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a pair'),9,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'high card'),10,
+null))))))))))) as  winningRank,
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'high card') ,getHighCard(false,gameNo,regexp_extract(manSidePot.handSummary, r' high card ([^\-]*)\-')),
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a pair')  ,getHighCard(false,gameNo,regexp_extract(manSidePot.handSummary, r' a pair of ([^\-]*)\-')),
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*'), 'two pairs') ,getHighCard(false,gameNo,array_to_string(SPLIT(regexp_extract(manSidePot.handSummary, r' two pairs, ([^\-]*)\-'), 'and'), ',')),
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'three of a kind') ,getHighCard(false,gameNo,regexp_extract(manSidePot.handSummary, r' three of a kind, ([^\-]*)\-')),
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*'), 'straight flush') ,getHighCard(true,gameNo,regexp_extract(manSidePot.handSummary, r' a straight flush, ([^\-]*)\-')),
+
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a straight')  ,getHighCard(true,gameNo,array_to_string(SPLIT(regexp_extract(manSidePot.handSummary,r' a straight, ([^\-]*)\-'), 'to'), ',')),
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a flush') ,getHighCard(false,gameNo,regexp_extract(manSidePot.handSummary, r' a flush, ([^\-]*)\-')),
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'a fullhouse') ,getHighCard(false,gameNo,array_to_string(SPLIT(regexp_extract(manSidePot.handSummary,  r' a fullhouse, ([^\-]*)\-'), 'full of'), ',')),
+
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'full house') ,getHighCard(false,gameNo,array_to_string(SPLIT(regexp_extract(manSidePot.handSummary,  r' a full house, ([^\-]*)\-'), 'full of'), ',')),
+if(regexp_contains(REGEXP_EXTRACT(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'), r'^[^,]*') , 'four of a kind') ,getHighCard(false,gameNo,regexp_extract(manSidePot.handSummary, r' four of a kind, ([^\-]*)\-')),
+if(regexp_contains(LOWER(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]')), 'royal flush') ,getHighCard(false,gameNo,'ace'),null))))))))))) As highCard,
+manSidePot.alias ,manSidePot.sidePot,
+manSidePot.handSummary,
+if(regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]') is null,if(regexp_contains(manSidePot.handSummary, r'.*\(folded\)'),'folded',null), regexp_extract(manSidePot.handSummary, r'.*\[([^)]+)\]'))as plyboards
+  )) sidePotInfo
+ 
+ from handSummaryDtls,
+ UNNEST(playerDtls.ManualSidePot) as manSidePot
+ group by gameNo,mainPot ,result,playerAlias,sidePotValue
+)
+,getMYExactWinningRanks as(
+select *except(sidePotInfo),analyzeBoard(TO_JSON_STRING(t) )as sidePotInfo  from splitSidePot as t
+
+)
+
+,getHighPokerRank As (
+select  gameNo,mainPot ,result,playerAlias ,sidePotValue,min(sidePotInfo.winningRank) winningNumber,MIN(sidePotInfo.highCard) maxHighCard,
+array_agg(struct(
+sidePotInfo.sidePot,sidePotInfo.alias ,sidePotInfo.winningRank,sidePotInfo.highCard
+))sidePotDtls
+from
+getMYExactWinningRanks,
+ UNNEST(sidePotInfo) as sidePotInfo
+ group by   gameNo,mainPot ,result,playerAlias ,sidePotValue
+),
+getMinCard as (
+select  gameNo,mainPot ,result,playerAlias ,winningNumber,sidePotValue,
+array_agg(struct(
+sidePotInfo.sidePot,sidePotInfo.alias ,sidePotInfo.winningRank,sidePotInfo.highCard,
+if(sidePotInfo.winningRank = winningNumber,sidePotInfo.highCard,null) as minCards
+)) sidePotDtls
+from
+getHighPokerRank,
+ UNNEST(sidePotDtls) as sidePotInfo
+ group by   gameNo,mainPot ,result,playerAlias ,winningNumber,sidePotValue
+),
+getMinimumHighCardNumber as (
+select  gameNo,mainPot ,result,playerAlias ,winningNumber,MIN(sidePotInfo.minCards) minhighCardNumber,sidePotValue,
+array_agg(struct(
+sidePotInfo.sidePot,sidePotInfo.alias ,sidePotInfo.winningRank,sidePotInfo.highCard,
+if(sidePotInfo.winningRank = winningNumber,sidePotInfo.highCard,null) as minCards
+)) sidePotDtls
+from
+getMinCard,
+ UNNEST(sidePotDtls) as sidePotInfo
+ group by   gameNo,mainPot ,result,playerAlias ,winningNumber,sidePotValue
+),
+countMinhighCardNumberAndwinningNumber as(
+select  gameNo,mainPot ,result,playerAlias ,winningNumber, minhighCardNumber,sidePotValue,
+SUM(if(sidePotInfo.highCard = minhighCardNumber AND sidePotInfo.winningRank = winningNumber, 1,0))count1,
+array_agg(struct(
+sidePotInfo.sidePot,sidePotInfo.alias ,sidePotInfo.winningRank,sidePotInfo.highCard
+)) sidePotDtls
+from
+getMinimumHighCardNumber,
+ UNNEST(sidePotDtls) as sidePotInfo
+ group by   gameNo,mainPot ,sidePotInfo.sidePot,result,playerAlias ,winningNumber,minhighCardNumber,sidePotValue
+),
+distributePotAmount as (
+select  gameNo,mainPot ,result,playerAlias ,winningNumber, minhighCardNumber,sidePotValue,
+array_agg(struct(
+sidePotInfo.sidePot,sidePotInfo.alias ,sidePotInfo.winningRank,sidePotInfo.highCard,
+if(sidePotInfo.winningRank =winningNumber and sidePotInfo.highCard = minhighCardNumber,CAST(sidePotValue as FLOAT64)/count1,0) as totalWin
+
+)) sidePotDtls
+from
+countMinhighCardNumberAndwinningNumber,
+ UNNEST(sidePotDtls) as sidePotInfo
+ group by   gameNo,mainPot ,result,playerAlias ,winningNumber,minhighCardNumber,sidePotValue ,sidePotInfo.sidePot
+)
+,generateFinalWinningAmt AS(
+select gameNo,regexp_extract(sidePotInfo.sidePot, r'^sidePot(.+?)_') sidePotNumber,
+sidePotValue ,sidePotInfo.totalWin,
+sidePotInfo.alias AS playerAlias
+from distributePotAmount,
+UNNEST(sidePotDtls) AS sidePotInfo
+)
+,updateSidePotInNewHands as (
+select t1.gameNo,t1.uniqueId  ,t1.playerAlias ,t1.PlayerStats, t1.mainPot,HHSummary.playerDtls.isplayerDidActionsAfterFold as isplayerDidActionsAfterFold,HHSummary.playerDtls.Actions,HHSummary.playerDtls.ManualSidePot as sidePot
+FROM `mygame-162109.PP_Dev_Data.new_hands_prod`   as t1
+JOIN handSummaryDtls as HHSummary 
+ON HHSummary.gameNo = t1.gameNo and HHSummary.playerAlias = t1.playerAlias and t1.uniqueId  = HHSummary.uniqueId
+and    t1.gameInfo.gameSubType <> 'Omaha Hi/Lo'   and t1.isRIT <> true
+and t1.partitionDate >= '2020-01-17 00:00:00' 
+and t1.partitionDate <= '2020-02-13 00:00:00'
+
+-- and t1.gameNo = 19453039110
+
+
+)
+,getAllInPlayer as (
+SELECT
+gameNo,uniqueId  ,playerAlias ,isplayerDidActionsAfterFold, mainPot,sidePot.alias,sidePot.sidePotWithAlias as sidePot,
+if(Actions.action = 'show',struct(array_to_string(Actions.cards,'') as cards,Actions.actor,Actions.action ,
+if(playerAlias=Actions.actor AND PlayerStats.alias=Actions.actor, PlayerStats.collectedAmount ,null)AS collectedAmount,
+if(playerAlias=Actions.actor AND PlayerStats.alias=Actions.actor, PlayerStats.wonNetAmount ,null)AS wonNetAmount,
+if(playerAlias=Actions.actor AND PlayerStats.alias=Actions.actor, PlayerStats.lostAmount ,null)AS lostAmount,
+if(playerAlias=Actions.actor AND PlayerStats.alias=Actions.actor, PlayerStats.result ,null)AS result),null) holeCards,
+
+if(Actions.action = 'allIn' ,struct(Actions.street AS street,Actions.actor AS actor),null) actionStreet,
+if(Actions.action = 'allIn' ,Actions.street,null) actionStreetArray,
+if( Actions.actor='dealer'  ,struct (array_to_string(Actions.cards,'') as board,Actions.action as street,
+  if(Actions.action = 'flop','1',if(Actions.action = 'turn','2',if(Actions.action = 'river','3',null))) As streetIndex
+),null) plyBoards
+FROM updateSidePotInNewHands ,
+UNNEST(Actions) as Actions,
+UNNEST(sidePot) as sidePot
+
+
+)
+-- select * from getAllInPlayer
+,generateAggForAllInPlayer As(
+select
+gameNo,uniqueId,playerAlias, mainPot,isplayerDidActionsAfterFold,
+ARRAY_AGG(
+struct(
+sidePot,
+
+replace(regexp_extract(sidePot, '^(.+?)_'),'sidePot','') AS sidePotNumber,
+regexp_extract(sidePot, '_([^_]*)$') AS sidePotValue,
+REGEXP_REPLACE(REGEXP_REPLACE(sidePot,'sidePot[0-9]_Value[0-9]_',''),'_([^_]*)$','') as sidepotActor
+) IGNORE NULLS) as sidePotDetails,
+ARRAY_AGG(DISTINCT  actionStreetArray IGNORE NULLS ORDER BY actionStreetArray DESC) actionStreetLength,
+ARRAY_AGG(DISTINCT  actionStreet.actor IGNORE NULLS ) allInPlayerLength,
+ARRAY_AGG(DISTINCT plyBoards.board IGNORE NULLS) distinctPlyrBoard,
+ARRAY_AGG(if((holeCards.cards  is not null and holeCards.actor is not null AND  regexp_contains(sidePot, concat('_',holeCards.actor ,'_')  )),
+struct(
+REPLACE(holeCards.cards,',',' ') as board,
+holeCards.actor as actor,
+holeCards.collectedAmount,holeCards.wonNetAmount,holeCards.lostAmount,holeCards.result,
+REGEXP_REPLACE(replace(replace(replace(sidePot, holeCards.actor,''),'sidePot',''),'Value',''),'[^.0-9 ]',' ')AS side,
+split(REGEXP_REPLACE(replace(replace(replace(sidePot, holeCards.actor,''),'sidePot',''),'Value',''),'[^.0-9 ]',' ') ,' ')[offset(0)] AS sidePotNumber,
+split(REGEXP_REPLACE(replace(replace(replace(sidePot, holeCards.actor,''),'sidePot',''),'Value',''),'[^.0-9 ]',' ') ,' ')[offset(3)] AS sidePotValue),
+null)
+IGNORE NULLS order by
+split(REGEXP_REPLACE(replace(replace(replace(sidePot, holeCards.actor,''),'sidePot',''),'Value',''),'[^.0-9 ]',' ') ,' ')[offset(0)] asc) sidePotsArray,
+ARRAY_AGG(if((plyBoards.board is not null), struct(plyBoards.board, plyBoards.street,plyBoards.streetIndex ),null) IGNORE NULLS  ) plyBoardsStreet,
+getFinalBoard(ARRAY_AGG(if((plyBoards.board is not null), struct(plyBoards.board, plyBoards.street,plyBoards.streetIndex ),null) IGNORE NULLS  ),ARRAY_AGG(actionStreetArray IGNORE NULLS ORDER BY actionStreetArray DESC LIMIT 1)[SAFE_OFFSET(0)]) finalBoard,
+ARRAY_AGG(actionStreetArray IGNORE NULLS ORDER BY actionStreetArray DESC LIMIT 1)[SAFE_OFFSET(0)] actionStreet
+from getAllInPlayer
+group by gameNo,isplayerDidActionsAfterFold,uniqueId,playerAlias,mainPot
+)
+,filterAllInPlayersList AS(
+select gameNo,playerAlias,mainPot,
+EXISTS (SELECT 1 FROM UNNEST(allInPlayerLength) as plyr WHERE plyr = playerAlias) plyerExits,
+count(distinct sidePotsArray.actor) numOfplyr,actionStreet,sidePotNumber,sidePotsArray.sidePotValue AS sidePotValue,
+ARRAY_AGG(struct(sidePotsArray.board,sidePotsArray.actor,
+sidePotsArray.collectedAmount,sidePotsArray.wonNetAmount,sidePotsArray.lostAmount,sidePotsArray.result)) allInBoard,
+finalBoard
+from generateAggForAllInPlayer,
+UNNEST(sidePotsArray) As sidePotsArray
+where  
+ ARRAY_LENGTH(allInPlayerLength) > 1
+and ARRAY_LENGTH(actionStreetLength) = 1 and isplayerDidActionsAfterFold = true
+group by gameNo,playerAlias,actionStreet,sidePotNumber,sidePotValue,mainPot,plyerExits,finalBoard
+),
+temp3 AS (
+select *EXCEPT (allInBoard)
+from filterAllInPlayersList,
+UNNEST(allInBoard) AS allInBoard
+where   plyerExits)
+
+,countNumOfPlyrs as (
+select gameNo,playerAlias ,mainPot ,sidePotDetails.sidePotNumber,sidePotDetails.sidePotValue,count(DISTINCT    sidePotDetails.sidepotActor) totalPlayers
+from generateAggForAllInPlayer,
+UNNEST(sidePotDetails) as sidePotDetails
+group by gameNo,playerAlias ,mainPot ,sidePotDetails.sidePotNumber,sidePotDetails.sidePotValue
+order by gameNo,playerAlias 
+),
+temp4 as (
+SELECT
+  t1.*,t2.totalPlayers
+FROM temp3 t1
+JOIN countNumOfPlyrs t2  
+ON  t1.gameNo = t2.gameNo
+AND t1.playerAlias = t2.playerAlias
+AND t1.sidePotNumber = t2.sidePotNumber
+AND t1.sidePotValue = t2.sidePotValue
+AND t1.mainPot = t2.mainPot
+)
+,RemoveDuplicate AS(
+SELECT a.*,(
+select totalWin from
+(SELECT *, ROW_NUMBER() OVER (PARTITION BY gameNo,playerAlias,sidePotNumber) as rn from generateFinalWinningAmt) b
+where b.rn=1        
+    and a.actor = b.playerAlias
+           and   b.gameNo=  a.gameNo
+          and   b.sidePotNumber= a.sidePotNumber
+                 and   b.sidePotValue=  a.sidePotValue
+) sidePotWinningAmt
+FROM temp4 AS  a
+),
+RemoveDuplicate1 as (
+SELECT *, ROW_NUMBER() OVER (PARTITION BY gameNo,playerAlias,sidePotNumber,actor) as rn from RemoveDuplicate
+),
+allInDtlsWithBoard AS(
+ select gameNo,playerAlias,numOfplyr,totalPlayers,actionStreet,finalBoard,sidePotNumber,sidePotValue,mainPot,
+ array_agg(actor) actorList,
+ARRAY_AGG(struct(sidePotWinningAmt,board,actor,sidePotValue,sidePotNumber,collectedAmount,wonNetAmount,lostAmount,result)) AS allInBoard
+ from RemoveDuplicate1
+ where totalPlayers >1 and  rn =1
+ group by gameNo,playerAlias,numOfplyr,totalPlayers,actionStreet,finalBoard,sidePotNumber,sidePotValue,mainPot
+)
+, unnestAllInDtls As (
+select
+gameNo,playerAlias,mainPot,numOfplyr,totalPlayers,actionStreet,CAST(sidePotNumber AS INT64) AS sidePotNumber,CAST(sidePotValue AS FLOAT64)  As sidePot,finalBoard AS board,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(0)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName1,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(0)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard1,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(0)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount1,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(0)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount1,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(0)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount1,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(0)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result1,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player1WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(1)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(1)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName2,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(1)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(1)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard2,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(1)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount2,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(1)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount2,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(1)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount2,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(1)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result2,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(1)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player2WinningAmt,
+
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(2)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(2)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName3,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(2)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(2)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard3,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(2)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount3,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(2)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount3,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(2)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount3,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(2)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result3,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(2)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player3WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(3)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(3)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName4,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(3)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(3)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard4,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(3)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount4,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(3)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount4,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(3)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount4,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(3)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result4,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(3)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player4WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(4)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(4)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName5,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(4)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(4)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard5,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(4)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount5,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(4)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount5,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(4)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount5,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(4)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result5,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(4)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player5WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(5)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(5)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName6,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(5)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(5)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard6,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(5)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount6,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(5)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount6,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(5)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount6,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(5)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result6,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(5)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player6WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(6)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(6)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName7,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(6)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(6)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard7,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(6)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount7,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(6)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount7,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(6)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount7,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(6)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result7,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(6)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player7WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(7)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(7)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName8,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(7)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(7)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard8,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(7)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount8,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(7)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount8,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(7)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount8,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(7)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result8,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(7)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player8WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(8)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(8)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName9,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(8)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(8)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard9,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(8)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount9,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(8)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount9,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(8)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount9,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(8)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result9,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(8)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player9WinningAmt,
+
+ARRAY_AGG(allInBoard[SAFE_OFFSET(9)].actor   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(9)].actor DESC LIMIT 1)[SAFE_OFFSET(0)] playerName10,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(9)].board   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(9)].board DESC LIMIT 1)[SAFE_OFFSET(0)] holecard10,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(9)].collectedAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].collectedAmount DESC LIMIT 1)[SAFE_OFFSET(0)] collectedAmount10,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(9)].wonNetAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].wonNetAmount DESC LIMIT 1)[SAFE_OFFSET(0)] wonNetAmount10,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(9)].lostAmount   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].lostAmount DESC LIMIT 1)[SAFE_OFFSET(0)] lostAmount10,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(9)].result   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].result DESC LIMIT 1)[SAFE_OFFSET(0)] result10,
+ARRAY_AGG(allInBoard[SAFE_OFFSET(9)].sidePotWinningAmt   IGNORE NULLS ORDER BY allInBoard[SAFE_OFFSET(0)].sidePotWinningAmt DESC LIMIT 1)[SAFE_OFFSET(0)] player10WinningAmt
+
+from allInDtlsWithBoard
+where actionStreet is not null AND actionStreet <> 'river'
+and sidePotNumber is not null
+group by gameNo,playerAlias,numOfplyr,totalPlayers,actionStreet,board,sidePotNumber,sidePotValue,mainPot
+),
+Result as (select *except  (rn,numOfplyr,actionStreet),concat(cast(gameNo AS String),'_',cast(mainPot AS String),'_',cast(sidePot AS String),'_',cast(playerAlias  AS String)) as uniqueId from
+(SELECT *, ROW_NUMBER() OVER (PARTITION BY gameNo,playerAlias,sidePotNumber) as rn from unnestAllInDtls) t
+where rn=1  
+)
+select * from Result   
+
+
+
+

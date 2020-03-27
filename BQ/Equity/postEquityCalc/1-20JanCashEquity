@@ -1,0 +1,82 @@
+with equityFromParser As (
+SELECT gameNo as uniqueId,board,
+[
+ struct (playerName1 AS playerName,holecard1 AS holecard,cast(player1Equity AS FLOAT64)AS equity),
+ struct (playerName2 AS playerName,holecard2 AS holecard,cast(player2Equity AS FLOAT64)AS equity),
+ struct (playerName3 AS playerName,holecard3 AS holecard,cast(player3Equity AS FLOAT64)AS equity),
+ struct (playerName4 AS playerName,holecard4 AS holecard,cast(player4Equity AS FLOAT64)AS equity),
+ struct (playerName5 AS playerName,holecard5 AS holecard,cast(player5Equity AS FLOAT64)AS equity),
+ struct (playerName6 AS playerName,holecard6 AS holecard,cast(player6Equity AS FLOAT64)AS equity),
+ struct (playerName7 AS playerName,holecard7 AS holecard,cast(player7Equity AS FLOAT64)AS equity),
+ struct (playerName8 AS playerName,holecard8 AS holecard,cast(player8Equity AS FLOAT64)AS equity),
+ struct (playerName9 AS playerName,holecard9 AS holecard,cast(player9Equity AS FLOAT64)AS equity),
+ struct (playerName10 AS playerName,holecard10 AS holecard,cast(player10Equity AS FLOAT64)AS equity)
+] as equityInfo
+FROM `mygame-162109.PP_Dev_Data.newHandCashAmulyaEquity1`   
+),
+flattenedEquityParserData as (
+select *except(equityInfo) from equityFromParser,
+UNNEST(equityInfo)
+where playerName is not null
+),
+mygameEuityRawData as (
+  SELECT gameNO as gameNO,playerAlias,board,uniqueId as uniqueId,
+  [
+    struct (playerName1 AS playerName,holecard1 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount1 AS collectedAmount,wonNetAmount1 AS wonNetAmount,lostAmount1 AS lostAmount,player1WinningAmt AS winningAmt,result1 AS result),
+    struct (playerName2 AS playerName,holecard2 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount2 AS collectedAmount,wonNetAmount2 AS wonNetAmount,lostAmount2 AS lostAmount,player2WinningAmt AS winningAmt,result2 AS result),          
+    struct (playerName3 AS playerName,holecard3 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount3 AS collectedAmount,wonNetAmount3 AS wonNetAmount,lostAmount3 AS lostAmount,player3WinningAmt AS winningAmt,result3 AS result),
+    struct (playerName4 AS playerName,holecard4 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount4 AS collectedAmount,wonNetAmount4 AS wonNetAmount,lostAmount4 AS lostAmount,player4WinningAmt AS winningAmt,result4 AS result),
+    struct (playerName5 AS playerName,holecard5 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount5 AS collectedAmount,wonNetAmount5 AS wonNetAmount,lostAmount5 AS lostAmount,player5WinningAmt AS winningAmt,result5 AS result),          
+    struct (playerName6 AS playerName,holecard6 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount6 AS collectedAmount,wonNetAmount6 AS wonNetAmount,lostAmount6 AS lostAmount,player6WinningAmt AS winningAmt,result6 AS result),
+    struct (playerName7 AS playerName,holecard7 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount7 AS collectedAmount,wonNetAmount7 AS wonNetAmount,lostAmount7 AS lostAmount,player7WinningAmt AS winningAmt,result7 AS result),
+    struct (playerName8 AS playerName,holecard8 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount8 AS collectedAmount,wonNetAmount8 AS wonNetAmount,lostAmount8 AS lostAmount,player8WinningAmt AS winningAmt,result8 AS result),
+    struct (playerName9 AS playerName,holecard9 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount9 AS collectedAmount,wonNetAmount9 AS wonNetAmount,lostAmount9 AS lostAmount,player9WinningAmt AS winningAmt,result9 AS result),          
+    struct (playerName10 AS playerName,holecard10 AS holecard,mainPot,cast(sidePotNumber AS FLOAT64)AS sidePotNumber,sidePot,collectedAmount10 AS collectedAmount,wonNetAmount10 AS wonNetAmount,lostAmount10 AS lostAmount,player10WinningAmt AS winningAmt,result10 AS result)
+] AS equityInfo
+FROM `mygame-162109.PP_Dev_Data.newHandsRawEquityNewQueryCashData`      where playerName2  is not null
+),
+flattenedMygameEuityRawData as (
+select *except(equityInfo) from mygameEuityRawData,
+UNNEST(equityInfo)
+where playerName is not null
+),
+equity as (
+SELECT gameNo,t1.uniqueId,t1.board,t1.playerAlias,
+array_agg(struct (t1.playerName,t1.holecard,t2.equity,t1.mainPot,sidePotNumber,sidePot,collectedAmount,wonNetAmount,lostAmount,winningAmt,result)IGNORE NULLS )AS equityInfo
+ FROM flattenedMygameEuityRawData  t1
+ LEFT JOIN flattenedEquityParserData    t2
+ ON  cast(t2.uniqueId as string) = cast(t1.uniqueId as string) and  t2.playerName =t1.playerName
+ group by gameNo,t1.uniqueId,t1.board,t1.playerAlias
+ )
+,calcaulateEvDiffforEachPot AS(
+SELECT gameNO,board,playerAlias,
+ARRAY_AGG(if(equityInfo.playerName is not null and equityInfo.playerName = playerAlias ,struct(
+equityInfo.playerName,equityInfo.holecard,equityInfo.equity,equityInfo.mainPot,equityInfo.sidePotNumber,
+equityInfo.sidePot,equityInfo.collectedAmount,equityInfo.wonNetAmount,
+equityInfo.lostAmount,equityInfo.winningAmt,equityInfo.result, 
+if(equityInfo.sidePotNumber is null,
+((equityInfo.equity)*equityInfo.mainPot)-if(equityInfo.winningAmt is null ,0 ,equityInfo.winningAmt),
+((equityInfo.equity)*equityInfo.sidePot)-if(equityInfo.winningAmt is null ,0 ,equityInfo.winningAmt)) as evDiff
+),null) IGNORE NULLS order by sidePotNumber desc,result desc,playerName  desc) as data
+FROM equity,
+UNNEST(equity.equityInfo) AS equityInfo
+where equityInfo.playerName is not null 
+group by  gameNO,board,playerAlias,mainPot,uniqueId 
+),
+getTotalEvDiff AS(
+select gameNO,board,playerAlias as playerName,sum(evDiff) as totalEvDiff,
+ARRAY_AGG(if((data1.wonNetAmount is not null and data1.playerName = playerAlias),struct(data1.wonNetAmount,data1.lostAmount,data1.collectedAmount),null)IGNORE NULLS)  as data
+-- sum(evDiff-data.wonNetAmount - data.lostAmount) AS evAdjusted
+from calcaulateEvDiffforEachPot,
+UNNEST(data) AS data1
+group by gameNO,board,playerAlias
+),
+getEvAdjusted AS(
+select gameNO,board,playerName,totalEvDiff,
+sum(totalEvDiff+data[OFFSET(0)].wonNetAmount -data[OFFSET(0)].lostAmount) AS evAdjusted
+from getTotalEvDiff
+group by gameNO,board,playerName,totalEvDiff
+)
+select * from getEvAdjusted 
+order by 
+totalEvDiff 

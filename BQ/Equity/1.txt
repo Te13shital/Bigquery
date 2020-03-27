@@ -1,0 +1,42 @@
+***** Hand History For Game 19463548051 *****
+0.02/0.05 Texas Holdem Game Table (NL) - Sat Jan 18 12:29:53 EST 2020
+Table 6-Max NLH [$2.50-$5 Buy-in] 21 (Real Money) -- Seat 3 is the button
+Total number of players : 6/6
+Seat 1: Morshinska ($5)
+Seat 2: LolUrCommy ($9.73)
+Seat 3: shakka14 ($9.54)
+Seat 4: Poperz ($0.03)
+Seat 5: trickyop ($5)
+Seat 6: Hermit93 ($5.13)
+Poperz posts small blind (0.02)
+trickyop posts big blind (0.05)
+** Dealing down cards **
+Dealt to trickyop [ 5h, 6d ]
+Hermit93 raises 0.15 to 0.15
+Morshinska folds 
+LolUrCommy folds 
+shakka14 folds 
+Poperz calls (0.01)
+Poperz is all-In.
+trickyop folds 
+** Dealing Flop ** : [ 2h, 3d, 2d ]
+** Dealing Turn ** : [ 5c ]
+** Dealing River ** : [ As ]
+Creating Main Pot with $ 0.09 with Poperz
+** Summary **
+Main Pot: $0.09 Side Pot 1: $0.04 Rake: $0.0
+Board: [ 2h, 3d, 2d, 5c, As ]
+Morshinska balance $5, didn't bet (folded)
+LolUrCommy balance $9.73, didn't bet (folded)
+shakka14 balance $9.54, didn't bet (folded)
+Poperz balance $0.09, bet $0.03, collected $0.09, net +$0.06[ Tc, Kc ] [ a pair of twos -- As,Kc,Tc,2h,2d ]
+trickyop balance $4.95, lost $0.05 (folded)
+Hermit93 balance $5.12, bet $0.15, collected $0.14, lost $0.01[ Qs, Js ] [ a pair of twos -- As,Qs,Js,2h,2d ]
+** Account Info **
+Morshinska - pp_Artist89
+LolUrCommy - pp_Dimeneid
+shakka14 - pp_shaka141414
+Poperz - pp_Poperz00
+trickyop - pp_trickyop
+Hermit93 - pp_Hermit93
+	
